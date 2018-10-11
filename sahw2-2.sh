@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/sh -x
 
 Online_file="timetable.json"
 
@@ -8,6 +8,7 @@ B_height="5"
 
 User_config="usr_config"
 Class="usr_class"
+Base_Schedule="base_schedule"
 Schedule="usr_schedule"
 
 
@@ -52,41 +53,41 @@ fi
 #
 ##################################################
 
-if ! [ -e "$Schedule" ] ; then
+if ! [ -e "$Base_Schedule" ] ; then
 	# Build x-label: Monday ~ Sunday
-	echo -n 'x  ' >> $Schedule
+	echo -n 'x  ' >> $Base_Schedule
 	for i in '.Mon' '.Tue' '.Wed' '.Thu' '.Fri' '.Sat' '.Sun' ; do 
-		echo -n $i >> $Schedule ;
-		seq -s ' ' $(( $B_width - 4 )) | tr -d "[:digit:]" >> $Schedule
+		echo -n $i >> $Base_Schedule ;
+		seq -s ' ' $(( $B_width - 4 )) | tr -d "[:digit:]" >> $Base_Schedule
 	done
-	echo >> $Schedule
+	echo >> $Base_Schedule
 
 	# Build blanks that fill in course name.
 	for time in 'M' 'N' 'A' 'B' 'C' 'D' 'X' 'E' 'F' 'G' 'H' 'Y' 'I' 'J' 'K' 'L' ; do
 		tmp="|x."
-		echo -n "$time  " >> $Schedule
+		echo -n "$time  " >> $Base_Schedule
 		for i in `seq -s ' ' 7` ; do
-			echo -n "$tmp" >> $Schedule
-			seq -s ' ' $(( $B_width - ${#tmp} )) | tr -d "[:digit:]" >> $Schedule
+			echo -n "$tmp" >> $Base_Schedule
+			seq -s ' ' $(( $B_width - ${#tmp} )) | tr -d "[:digit:]" >> $Base_Schedule
 		done
-		echo >> $Schedule
+		echo >> $Base_Schedule
 
 		tmp="|."
 		for lines in `seq -s ' ' $(( $B_height - 2 ))` ; do
-			echo -n ".  " >> $Schedule
+			echo -n ".  " >> $Base_Schedule
 			for i in `seq -s ' ' 7` ; do
-				echo -n "$tmp" >> $Schedule
-				seq -s ' ' $(( $B_width - ${#tmp} )) | tr -d "[:digit:]" >> $Schedule
+				echo -n "$tmp" >> $Base_Schedule
+				seq -s ' ' $(( $B_width - ${#tmp} )) | tr -d "[:digit:]" >> $Base_Schedule
 			done
-			echo >> $Schedule
+			echo >> $Base_Schedule
 		done
 
-		echo -n "=  " >> $Schedule
+		echo -n "=  " >> $Base_Schedule
 		for i in `seq -s ' ' 7` ; do
-			seq -s= $(( $B_width - 2 )) | tr -d "[:digit:]" >> $Schedule
-			echo -n "  " >> $Schedule
+			seq -s= $(( $B_width - 2 )) | tr -d "[:digit:]" >> $Base_Schedule
+			echo -n "  " >> $Base_Schedule
 		done
-		echo >> $Schedule
+		echo >> $Base_Schedule
 	done
 
 fi
@@ -101,6 +102,11 @@ fi
 Add_class="0"
 Options="3"
 Exit="2"
+
+FindCollision() {
+	cat $3 | grep -E "$1[MNABCDXEFGHYIJKL]*$2" | awk -F '-' '{print $2}' >> $4
+	echo "" >> $4
+}
 
 # Check collision.
 IsCollision() {
@@ -136,7 +142,8 @@ IsCollision() {
 			echo $i "MNABCDXEFGHYIJKL" >> bang
 		fi
 	done
-	for i in $get_class ; do
+
+	for i in $1 ; do
 		time=`cat $Class | grep -E "^$i " | awk -F '"' '{print $2}' | cut -d '-' -f 1 | sed -e 's/\(.\)/\1 /g'`
 		for j in $time ; do
 			case $j in
@@ -149,7 +156,7 @@ IsCollision() {
 						#if [ "`echo $bang | grep -E "^$i$|^$i | $i$| $i "`" = "" ] ; then 
 						#	bang="$bang$i "
 						#fi
-						sed -i '' -e "${now_line} s/$j/ /g" bang
+						sed -i '' -e "${now_line} s/$j//g" bang
 					# No collision.
 					else
 						sed -i '' -e "${now_line} s/$j/ /g" table
@@ -163,10 +170,76 @@ IsCollision() {
 	done
 	
 	# Output collision message
+	Choose_class="tmp_class"
+	Collision_class="collision_class"
+	select=`echo $1 | sed -e '1,$ s/ / |^/g'`
+	cat $Class | grep -E "^$select " | awk -F '"' '{print $2}' | cut -d '-' -f 1,3 | sed -e "1,$ s/- /-/g" > $Choose_class
+	echo -n "" > $Collision_class
+	for i in `cat bang` ; do
+		case $i in
+			[0-7])
+				day=$i
+			;;
+			*)
+				for j in M N A B C D X E F G H Y I J K L ; do
+					# Collision happened.
+					if [ "`cat bang | grep $day | grep $j`" = "" ] ; then
+						echo "Collision: $day$j" >> $Collision_class
+						#FindCollision $day $j $Choose_class $Collision_class
+						cat $Choose_class | grep -E "$day[MNABCDXEFGHYIJKL]*$j" | awk -F '-' '{print $2}' >> $Collision_class
+						echo "" >> $Collision_class
+					fi
+				done
+			;;
+		esac
+	done
 
+	if [ "`cat $Collision_class`" != "" ] ; then
+		is_collision="1"
+		dialog --clear --msgbox "************ Collision!! ************
+
+`cat $Collision_class`" 20 100
+	else
+		is_collision="0"
+	fi
+
+	rm -f table bang $Choose_class $Collision_class
+}
+
+FillClass() {
+	base_str="`seq -s ' ' $(($B_width-1)) | tr -d "[:digit:]"`"
+
+	now="1"
+	now_line=`cat $Schedule | grep -nr "^$3" | cut -d ":" -f 1`
+	while [ $now -le ${#1} ] ; do
+		echo $now_line
+		sub_name=`echo $1 | cut -c $now-$(($now+$B_width-4))`
+		sub_name=`echo "$base_str" | sed -E "s/^.{${#sub_name}}/$sub_name/"`
+		awk -v row=$now_line -v col=$(($2+1)) -v sub_str="$sub_name" -F '|' 'BEGIN {OFS="|"} { if( row == NR ) $col=sub_str}1' $Schedule > tmp && mv tmp $Schedule
+		now=$(($now+$B_width-3))
+		now_line=$(($now_line+1))
+	done
 }
 
 while true ; do 
+	# Fill course name into schedule.
+	cp $Base_Schedule $Schedule
+	cos=`cat $Class | grep -E " on$" | awk -F '"' '{print $2}' | cut -d '-' -f 1,3 | sed -E "1,$ s/- /-/g" | sed -E "1,$ s/ /./g"` 
+	for i in $cos ; do #`echo $cos | sed -E "1,$ s/[0-9][0-9MNABCDXEFGHYIJKL]*-//g"` ; do
+		cos_time=`echo $i | awk -F '-' '{print $1}' | sed -e '1,$ s/\(.\)/\1 /g'`
+		cos_ename=`echo $i | awk -F '-' '{print $2}'`
+		for j in $cos_time ; do
+			case $j in
+				[0-7])
+					day=$j
+				;;
+				*)
+					FillClass "$cos_ename" $day $j
+				;;
+			esac
+		done
+	done 
+
 	dialog --clear \
 		--ok-label "Add Schedule" \
 		--extra-button --extra-label "Options" \
@@ -175,9 +248,33 @@ while true ; do
 	
 	case $? in
 		$Add_class)
+			# "origin" stores classes which are already on.
+			origin=`cat $Class | grep -E "on$" | awk -F ' ' '{print $1}'`
+			
 			exec 3>&1
-			get_class=$(dialog --clear --file $Class 2>&1 1>&3)
-			IsCollision
+			while true ; do
+				get_class=$(dialog --clear --file $Class 2>&1 1>&3)
+				if [ "$get_class" = "" ] ; then
+					# Restore class when cancel add class.
+					sed -i '' -e "/on$/ s/on$/off/g" $Class
+					for i in $origin ; do
+						sed -i '' -e "/^$i / s/off$/on/g" $Class
+					done
+					break
+				fi
+
+				# Write selected selected class from off to on. Even it has collision.
+				sed -i '' -e "/on$/ s/on$/off/g" $Class
+				for i in $get_class ; do
+					sed -i '' -e "/^$i / s/off$/on/g" $Class
+				done
+
+				# Check collision
+				IsCollision "$get_class"
+				if [ $is_collision = 0 ] ; then
+					break
+				fi
+			done
 		;;
 		$Options)
 
