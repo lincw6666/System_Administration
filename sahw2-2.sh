@@ -152,7 +152,8 @@ GetClassRoom() {
 	local get_course retval
 
 	get_course=`GetCourse $1`
-	retval=`echo $get_course | awk -F ' - ' '{print $1}' | sed -E -e "1,$ s/[0-9][^,]*-//g" -e "1,$ s/$/./g" | tr ',' ' ' | xargs -n1 | sort -u | xargs | tr ' ' ','`
+	retval=`echo $get_course | awk -F ' - ' '{print $1}' | sed -E "1,$ s/[0-9][^,]*-//g" \
+			| tr ',' ' ' | xargs -n1 | sort -u | xargs | tr ' ' ',' | sed -E "1,$ s/$/./g"`
 
 	echo $retval
 }
@@ -164,10 +165,14 @@ GetClassRoom() {
 ##################################################
 
 BuildChooseClass() {
-	local select
+	local time
 	
-	select=`echo $1 | sed -e '1,$ s/ / |^/g'`
-	cat $Class | grep -E "^$select " | awk -F '"' '{print $2}' | cut -d '-' -f 1,3 | sed -e "1,$ s/- /-/g" > $2
+	> $2
+	for i in $1 ; do 
+		time=`GetTime $i`
+		echo "$time-`GetName $i | tr '.' ' '`" >> $2
+	done
+
 } # End BuildChooseClass
 
 BuildCollisionClass() {
@@ -281,20 +286,59 @@ CourseOutputFormat() {
 }
 
 FillClass() {
-	base_str="`seq -s ' ' $(($B_width-1)) | tr -d "[:digit:]"`"
+	local base_str now now_line sub_name str_len
 
+	base_str="`seq -s ' ' $(($B_width-1)) | tr -d "[:digit:]"`"
 	now="1"
 	now_line=`cat $Schedule | grep -nr "^$3" | cut -d ":" -f 1`
 	while [ $now -le ${#1} ] ; do
-		sub_name=`echo $1 | cut -c $now-$(($now+$B_width-4))`
-		sub_name=`echo "$base_str" | sed -E "s/^.{${#sub_name}}/$sub_name/"`
+		sub_name=`echo $1 | cut -c $now-$(($now+$B_width-4)) | sed -e 's/\\\/\\\\\\\/g'`
+		str_len=`echo ' ' | sed "s/ /$sub_name/"`
+		str_len=${#str_len}
+		sub_name=`echo "$base_str" | sed -E -e "s/^.{$str_len}/$sub_name/" -e 's/\\\/\\\\\\\/g'`
 		awk -v row=$now_line -v col=$(($2+1)) -v sub_str="$sub_name" -F '|' 'BEGIN {OFS="|"} { if( row == NR ) $col=sub_str}1' $Schedule > tmp && mv tmp $Schedule
 		now=$(($now+$B_width-3))
 		now_line=$(($now_line+1))
 	done
 } # End FillClass
 
+ShowNoCollision() {
+	local time now_line
+
+	cp $Class tmp_output
+	for i in $1 ; do
+		time=`GetTime $i | sed -e '1,$ s/\(.\)/\1 /g'`
+		for j in $time ; do
+			case $j in
+				[1-7])
+					now_line=$j
+				;;
+				*)
+					#sed -i '' -e "${now_line} s/$j/ /g" table
+					cat tmp_output | grep -E -v "$now_line[MNABCDXEFGHYIJKL]*$j" > tmp && mv tmp tmp_output
+				;;
+			esac
+		done
+	done
+
+	awk -F '"' '{print $2}' tmp_output | sed "1d" > tmp && mv tmp tmp_output
+	dialog --clear --msgbox "************ Class no collision ************
+
+`cat tmp_output`" 50 65
+
+	rm -f tmp_output
+}
+
+UpdateClass() {
+	sed -i '' -e "/on$/ s/on$/off/g" $Class
+	for i in $1 ; do
+		sed -i '' -e "/^$i / s/off$/on/g" $Class
+	done
+}
+
 while true ; do
+	> debug
+
 	# Get user options.
 	option=`GetOption`
 
@@ -312,7 +356,7 @@ while true ; do
 					day=$j
 				;;
 				*)
-					FillClass $cos_output $day $j
+					FillClass "$cos_output" $day $j
 				;;
 			esac
 		done
@@ -320,12 +364,15 @@ while true ; do
 
 	# Delete Sat. and Sun. according to user configuration.
 	if [ "`echo $option | grep "3"`" = "" ] ; then
-		
+		cat $Schedule | cut -c 1-$(($B_width*5 + 2)) > tmp && mv tmp $Schedule
 	fi
 
 	# Delete NMXY rows according to user configuration.
 	if [ "`echo $option | grep "4"`" = "" ] ; then
-		
+		#awk -F ' ' '/N/,/=/ {print $0}' $Schedule > debug
+		for i in N M X Y ; do 
+			sed -i '' -E -e "/^$i /,/^= / s/^.*$//g" -e "/^$/d" $Schedule
+		done
 	fi
 
 	dialog --clear \
@@ -342,20 +389,21 @@ while true ; do
 			exec 3>&1
 			while true ; do
 				get_class=$(dialog --clear --file $Class 2>&1 1>&3)
+				
+				# Show class without collision.
+				if [ $? -eq 3 ] ; then
+					ShowNoCollision "$get_class"
+					continue
+				fi
+
 				if [ "$get_class" = "" ] ; then
 					# Restore class when cancel add class.
-					sed -i '' -e "/on$/ s/on$/off/g" $Class
-					for i in $origin ; do
-						sed -i '' -e "/^$i / s/off$/on/g" $Class
-					done
+					UpdateClass "$origin"
 					break
 				fi
 
 				# Write selected selected class from off to on. Even it has collision.
-				sed -i '' -e "/on$/ s/on$/off/g" $Class
-				for i in $get_class ; do
-					sed -i '' -e "/^$i / s/off$/on/g" $Class
-				done
+				UpdateClass "$get_class"
 
 				# Check collision
 				IsCollision "$get_class"
