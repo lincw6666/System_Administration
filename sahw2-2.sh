@@ -296,7 +296,8 @@ FillClass() {
 		str_len=`echo ' ' | sed "s/ /$sub_name/"`
 		str_len=${#str_len}
 		sub_name=`echo "$base_str" | sed -E -e "s/^.{$str_len}/$sub_name/" -e 's/\\\/\\\\\\\/g'`
-		awk -v row=$now_line -v col=$(($2+1)) -v sub_str="$sub_name" -F '|' 'BEGIN {OFS="|"} { if( row == NR ) $col=sub_str}1' $Schedule > tmp && mv tmp $Schedule
+		awk -v row=$now_line -v col=$(($2+1)) -v sub_str="$sub_name" -F '|' 'BEGIN {OFS="|"} { if( row == NR ) $col=sub_str}1' $Schedule > tmp
+		mv tmp $Schedule
 		now=$(($now+$B_width-3))
 		now_line=$(($now_line+1))
 	done
@@ -315,18 +316,71 @@ ShowNoCollision() {
 				;;
 				*)
 					#sed -i '' -e "${now_line} s/$j/ /g" table
-					cat tmp_output | grep -E -v "$now_line[MNABCDXEFGHYIJKL]*$j" > tmp && mv tmp tmp_output
+					cat tmp_output | grep -E -v "$now_line[MNABCDXEFGHYIJKL]*$j" > tmp
+					mv tmp tmp_output
 				;;
 			esac
 		done
 	done
 
-	awk -F '"' '{print $2}' tmp_output | sed "1d" > tmp && mv tmp tmp_output
+	awk -F '"' '{print $2}' tmp_output | sed "1d" > tmp
+	mv tmp tmp_output
 	dialog --clear --msgbox "************ Class no collision ************
 
 `cat tmp_output`" 50 65
 
 	rm -f tmp_output
+}
+
+FindCourse() {
+	local mode input time day
+	
+	exec 3>&1
+	mode=$(dialog --clear --menu "Find course by..." 10 20 8 \
+		1 "Name" \
+		2 "Time" 2>&1 1>&3)
+
+	if [ $? -eq 0 ] ; then
+		input=$(dialog --clear --inputbox "Please enter something" 10 30 2>&1 1>&3)
+		case $mode in
+			1)
+				# Find by name.
+				dialog --clear --msgbox "`sed "1d" $Class | awk -F '"' '{print $2}' | grep -E " - .*$input"`" 50 80
+			;;
+			2)
+				# Find by time.
+				> debug
+				sed "1d" $Class | awk -F '"' '{print $2}' > tmp_output
+				day="10"
+				time=`echo $input | sed -e '1,$ s/\(.\)/\1 /g'`
+				for i in $time ; do
+					case $i in
+						[1-7])
+							day=$i
+							cat tmp_output | grep -E "$day[MNABCDXEFGHYIJKL]" > tmp
+							mv tmp tmp_output
+						;;
+						[MNABCDXEFGHYIJKL])
+							if [ $day -eq 10 ] ; then
+								dialog --clear --msgbox "******** Bad input!! *********" 10 40
+								rm -f tmp_output
+								return 1
+							fi
+							cat tmp_output | grep -E "$day[MNABCDXEFGHYIJKL]*$i" > tmp
+							mv tmp tmp_output
+						;;
+						*)
+							dialog --clear --msgbox "******** Bad input!! *********" 10 40
+							rm -f tmp_output
+							return 1
+						;;
+					esac
+				done
+				dialog --clear --msgbox "`cat tmp_output`" 50 80
+				#rm -f tmp_output
+			;;
+		esac
+	fi
 }
 
 UpdateClass() {
@@ -337,8 +391,6 @@ UpdateClass() {
 }
 
 while true ; do
-	> debug
-
 	# Get user options.
 	option=`GetOption`
 
@@ -364,7 +416,8 @@ while true ; do
 
 	# Delete Sat. and Sun. according to user configuration.
 	if [ "`echo $option | grep "3"`" = "" ] ; then
-		cat $Schedule | cut -c 1-$(($B_width*5 + 2)) > tmp && mv tmp $Schedule
+		cat $Schedule | cut -c 1-$(($B_width*5 + 2)) > tmp
+		mv tmp $Schedule
 	fi
 
 	# Delete NMXY rows according to user configuration.
@@ -389,10 +442,17 @@ while true ; do
 			exec 3>&1
 			while true ; do
 				get_class=$(dialog --clear --file $Class 2>&1 1>&3)
-				
+				retval=$?
+
 				# Show class without collision.
-				if [ $? -eq 3 ] ; then
+				if [ $retval -eq 3 ] ; then
 					ShowNoCollision "$get_class"
+					continue
+				fi
+				
+				# Allow user to find course by keyword.
+				if [ $retval -eq 2 ] ; then
+					FindCourse
 					continue
 				fi
 
