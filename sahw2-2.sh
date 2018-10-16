@@ -315,7 +315,6 @@ ShowNoCollision() {
 					now_line=$j
 				;;
 				*)
-					#sed -i '' -e "${now_line} s/$j/ /g" table
 					cat tmp_output | grep -E -v "$now_line[MNABCDXEFGHYIJKL]*$j" > tmp
 					mv tmp tmp_output
 				;;
@@ -349,7 +348,6 @@ FindCourse() {
 			;;
 			2)
 				# Find by time.
-				> debug
 				sed "1d" $Class | awk -F '"' '{print $2}' > tmp_output
 				day="10"
 				time=`echo $input | sed -e '1,$ s/\(.\)/\1 /g'`
@@ -377,7 +375,7 @@ FindCourse() {
 					esac
 				done
 				dialog --clear --msgbox "`cat tmp_output`" 50 80
-				#rm -f tmp_output
+				rm -f tmp_output
 			;;
 		esac
 	fi
@@ -422,7 +420,6 @@ while true ; do
 
 	# Delete NMXY rows according to user configuration.
 	if [ "`echo $option | grep "4"`" = "" ] ; then
-		#awk -F ' ' '/N/,/=/ {print $0}' $Schedule > debug
 		for i in N M X Y ; do 
 			sed -i '' -E -e "/^$i /,/^= / s/^.*$//g" -e "/^$/d" $Schedule
 		done
