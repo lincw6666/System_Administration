@@ -44,7 +44,7 @@ if ! [ -e "$Class" ] ; then
 	sed -i '' -e '1,$s/"//g' $Class
 	awk '{print NR" \""$0"\" off"}' $Class > tmp && mv tmp $Class
 	sed -i '' -e '1i\
---buildlist "Add Class" 50 100 35' $Class
+--extra-button --extra-label "No collision" --help-button --help-label "Find course" --buildlist "Add Class" 50 100 35' $Class
 fi
 
 ##################################################
