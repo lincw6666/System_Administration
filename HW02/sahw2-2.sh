@@ -1,4 +1,4 @@
-#!/bin/sh -x
+#!/bin/sh
 
 Online_file="timetable.json"
 
