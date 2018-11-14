@@ -1,0 +1,109 @@
+#!/bin/sh
+
+dataset=""
+id=""
+filename=""
+rotate_cnt=""
+
+Check_num() {
+	case $1 in
+		[0-9]*)
+		;;
+		'')
+		;;
+		*)
+			Error
+		;;
+	esac
+}
+
+Func_list() {
+	id=$1
+	Check_num $id
+
+	echo "list $dataset $id"
+}
+
+Func_delete() {
+	id=$1
+	Check_num $id
+
+	echo "delete $dataset $id"
+}
+
+Func_export() {
+	id=$1
+	Check_num $id
+
+	echo "export $dataset $id"
+}
+
+Func_import() {
+	filename=$1
+	if [ -z "$filename" ] ; then Error; fi
+
+	echo "import $dataset $filename"
+}
+
+Func_create() {
+	local snap_num timestamp snap_name
+
+	rotate_cnt=$1
+	Check_num $rotate_cnt
+	if [ -z "$rotate_cnt" ] ; then rotate_cnt=20; fi
+	if [ $rotate_cnt -eq 0 ] ; then exit 0; fi
+
+	snap_num=`zfs list -t snapshot | grep $dataset | wc -l`
+	if [ $snap_num -ge $rotate_cnt ] ; then 
+		snap_name=`zfs list -t snapshot | grep $dataset | head -n $(($snap_num-$rotate_cnt+1)) | cut -d ' ' -f 1`
+		for snap in $snap_name; do
+			zfs destroy $snap
+		done
+	fi
+
+	timestamp=`date "+%Y-%m-%d_%H-%M-%S"`
+	zfs snapshot "${dataset}@${timestamp}"
+
+	echo "Snap ${dataset}@`date`"
+}
+
+Error() {
+	echo "Error!!"
+	exit 0
+}
+
+# Get commands.
+dataset=$2
+case $1 in
+	--list)
+		if [ -z "$dataset" ] ; then Error; fi
+		Func_list $3
+	;;
+
+	--delete)
+		if [ -z "$dataset" ] ; then Error; fi
+		Func_delete $3
+	;;
+
+	--export)
+		if [ -z "$dataset" ] ; then Error; fi
+		Func_export $3
+	;;
+
+	--import)
+		if [ -z "$dataset" ] ; then Error; fi
+		Func_import $3
+	;;
+
+	'')
+		Error
+	;;
+
+	*)
+		dataset=$1
+		if [ -z "$dataset" ] ;then Error; fi
+		Func_create $2
+	;;
+
+esac
+
