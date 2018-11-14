@@ -76,14 +76,32 @@ Func_export() {
 			xz ${f_name} && \
 			openssl enc -aes-256-cbc -in ${f_name}.xz \
 				-out ${f_name}.xz.enc
+		rm ${f_name}.xz
 	fi
 }
 
 Func_import() {
+	local f_name timestamp
+
 	filename=$1
+	Check_dataset $dataset
 	if [ -z "$filename" ] ; then Error; fi
 
-	echo "import $dataset $filename"
+	# Decreption.
+	f_name=`echo $filename | awk -F '.' '{print $1"."$2}'`
+	openssl enc -d -aes-256-cbc -in ${filename} -out ${f_name}
+	
+	# Decompression.
+	unxz $f_name
+	if [ $? -eq 1 ] ; then Error; fi	# File not exist.
+	f_name=`echo $f_name | cut -d '.' -f 1`
+
+	# Receive stream.
+	# First, delete all snapshots in dataset.
+	Func_delete
+	timestamp=`date "+%Y-%m-%d_%H-%M-%S"`
+	zfs receive -F ${dataset}@${timestamp} < ${f_name}
+	rm $f_name
 }
 
 Func_create() {
