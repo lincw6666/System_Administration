@@ -5,6 +5,7 @@ id=""
 filename=""
 rotate_cnt=""
 
+# Check num valid.
 Check_num() {
 	case $1 in
 		[0-9]*)
@@ -17,25 +18,65 @@ Check_num() {
 	esac
 }
 
-Func_list() {
-	id=$1
-	Check_num $id
+# Check dataset valid.
+Check_dataset() {
+	for data in `zfs list | cut -d ' ' -f 1`; do
+		if [ $1 = $data ] ; then
+			return
+		fi
+	done
+	Error
+}
 
-	echo "list $dataset $id"
+Func_list() {
+	#id=$1
+	#Check_num $id
+
+	# If dataset doesn't exist, report error.
+	if ! [ -z "$dataset" ] ; then
+		Check_dataset $dataset
+	fi
+
+	printf "%-10s%-20s%s\n" "ID" "Dataset" "Time"
+	if [ -z "$dataset" ] ; then dataset=".*"; fi
+	zfs list -t snapshot | grep "^$dataset@" | \
+		awk -F "@|_| " '{printf "%-10d%-20s%s %s\n", NR, $1, $2, $3}' | \
+		sed -e 's/-/:/3' -e 's/-/:/3'
 }
 
 Func_delete() {
+	local snap_name
+
 	id=$1
 	Check_num $id
+	Check_dataset $dataset
 
-	echo "delete $dataset $id"
+	snap_name=`zfs list -t snapshot | grep "^$dataset@" | cut -d ' ' -f 1`
+	if ! [ -z "$id" ] ; then
+		snap_name=`echo $snap_name | awk -v i=$id -F ' ' '{print $i}'`
+	fi
+	for snap in $snap_name; do
+		zfs destroy $snap
+	done
 }
 
 Func_export() {
+	local snap_name f_name
+
 	id=$1
 	Check_num $id
+	Check_dataset $dataset
+	if [ -z "$id" ] ; then id=1; fi	# id default to 1.
 
-	echo "export $dataset $id"
+	snap_name=`zfs list -t snapshot | grep "^$dataset@" | cut -d ' ' -f 1 | awk -v i=$id '{if (NR==i) print $0}'`
+
+	if ! [ -z "$snap_name" ] ; then
+		f_name=`echo $snap_name | cut -d '_' -f 1 | tr / \\`
+		zfs send ${snap_name} > ${f_name} && \
+			xz ${f_name} && \
+			openssl enc -aes-256-cbc -in ${f_name}.xz \
+				-out ${f_name}.xz.enc
+	fi
 }
 
 Func_import() {
@@ -50,21 +91,27 @@ Func_create() {
 
 	rotate_cnt=$1
 	Check_num $rotate_cnt
+	Check_dataset $dataset
 	if [ -z "$rotate_cnt" ] ; then rotate_cnt=20; fi
 	if [ $rotate_cnt -eq 0 ] ; then exit 0; fi
 
 	snap_num=`zfs list -t snapshot | grep $dataset | wc -l`
 	if [ $snap_num -ge $rotate_cnt ] ; then 
+		# Rotate snapshot.
+
 		snap_name=`zfs list -t snapshot | grep $dataset | head -n $(($snap_num-$rotate_cnt+1)) | cut -d ' ' -f 1`
 		for snap in $snap_name; do
 			zfs destroy $snap
+			if [ $? -eq 0 ] ; then
+				echo "Rotate ${snap}" | \
+					sed -e 's/-/:/3' -e 's/-/:/3' -e 's/_/ /g'
+			fi
 		done
 	fi
 
 	timestamp=`date "+%Y-%m-%d_%H-%M-%S"`
 	zfs snapshot "${dataset}@${timestamp}"
-
-	echo "Snap ${dataset}@`date`"
+	if [ $? -eq 0 ] ; then echo "Snap ${dataset}@`date`"; fi
 }
 
 Error() {
@@ -76,8 +123,8 @@ Error() {
 dataset=$2
 case $1 in
 	--list)
-		if [ -z "$dataset" ] ; then Error; fi
-		Func_list $3
+		# if [ -z "$dataset" ] ; then Error; fi
+		Func_list #$3
 	;;
 
 	--delete)
