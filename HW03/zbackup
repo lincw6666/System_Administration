@@ -13,7 +13,7 @@ Check_num() {
 		'')
 		;;
 		*)
-			Error
+			Error "Invalid ID number!!"
 		;;
 	esac
 }
@@ -25,7 +25,7 @@ Check_dataset() {
 			return
 		fi
 	done
-	Error
+	Error "Dataset does not exist!!"
 }
 
 Func_list() {
@@ -41,7 +41,7 @@ Func_list() {
 	if [ -z "$dataset" ] ; then dataset=".*"; fi
 	zfs list -t snapshot | grep "^$dataset@" | \
 		awk -F "@|_| " '{printf "%-10d%-20s%s %s\n", NR, $1, $2, $3}' | \
-		sed -e 's/-/:/3' -e 's/-/:/3'
+			sed -e 's/-/:/3' -e 's/-/:/3'
 }
 
 Func_delete() {
@@ -85,7 +85,7 @@ Func_import() {
 
 	filename=$1
 	Check_dataset $dataset
-	if [ -z "$filename" ] ; then Error; fi
+	if [ -z "$filename" ] ; then Error "Missing argument: filename!!"; fi
 
 	# Decreption.
 	f_name=`echo $filename | awk -F '.' '{print $1"."$2}'`
@@ -93,7 +93,7 @@ Func_import() {
 	
 	# Decompression.
 	unxz $f_name
-	if [ $? -eq 1 ] ; then Error; fi	# File not exist.
+	if [ $? -eq 1 ] ; then Error "Unable to decompress ${f_name}. Please make sure that the file exists!!"; fi	# File not exist.
 	f_name=`echo $f_name | cut -d '.' -f 1`
 
 	# Receive stream.
@@ -133,7 +133,7 @@ Func_create() {
 }
 
 Error() {
-	echo "Error!!"
+	echo "Error!!" $1
 	exit 0
 }
 
@@ -146,27 +146,27 @@ case $1 in
 	;;
 
 	--delete)
-		if [ -z "$dataset" ] ; then Error; fi
+		if [ -z "$dataset" ] ; then Error "Missing argument: dataset!!"; fi
 		Func_delete $3
 	;;
 
 	--export)
-		if [ -z "$dataset" ] ; then Error; fi
+		if [ -z "$dataset" ] ; then Error "Missing argument: dataset!!"; fi
 		Func_export $3
 	;;
 
 	--import)
-		if [ -z "$dataset" ] ; then Error; fi
+		if [ -z "$dataset" ] ; then Error "Missing argument: dataset!!"; fi
 		Func_import $3
 	;;
 
 	'')
-		Error
+		Error "Missing argument!!"
 	;;
 
 	*)
 		dataset=$1
-		if [ -z "$dataset" ] ;then Error; fi
+		# if [ -z "$dataset" ] ;then Error "Missing argument: dataset!!"; fi
 		Func_create $2
 	;;
 
