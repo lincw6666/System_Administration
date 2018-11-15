@@ -1,0 +1,110 @@
+#!/bin/sh
+
+# PROVIDE: ftp_watchd
+# REQUIRE: NETWORKING SERVERS
+# BEFORE: pureftpd
+# KEYWORD: shutdown
+
+. /etc/rc.subr
+
+name=ftp_watchd
+rcvar=ftp_watchd_enable
+
+load_rc_config $name
+
+pid=""
+ftp_watchd_enable=${ftp_watchd_enable:-"no"}
+ftp_watchd_command=${ftp_watchd_command:-"echo 'Hi' >> /tmp/hi"}
+command_upload=/usr/local/sbin/pure-uploadscript
+uploadscript=${uploadscript:-"/home/ftp/uploadscript"}
+pidfile=${pidfile:-"/var/run/pure-uploadscript.pid"}
+upload_args="-B -p ${pidfile} -r ${uploadscript}"
+
+Is_running() {
+	# If it is running, return 0, else return 1.
+	pid=$(check_pidfile ${pidfile} ${command_upload})
+	if [ -z "${pid}" ] ; then
+		return 1
+	else
+		return 0
+	fi
+}
+
+Func_start() {
+	if Is_running ; then
+		Error "ftp_watchd is already running!!"
+	elif ! checkyesno ftp_watchd_enable ; then
+		Error "Need to enable ftp_watchd first. Please add \"ftp_watchd_enable=\"YES\"\" to /etc/rc.conf."
+	else
+		# Start pure-uploadscript.
+		echo "${ftp_watchd_command}" > ${uploadscript}
+		${command_upload} ${upload_args}
+		echo "Start ftp_watchd."
+	fi
+}
+
+Func_stop() {
+	if ! Is_running ; then
+		Error "Can't stop!! ftp_watchd was not running."
+	else
+		echo "Stop ftp_watchd."
+		kill ${pid}
+		wait_for_pids ${pid}
+	fi
+}
+
+Func_restart() {
+	if Is_running ; then
+		Func_stop
+	else
+		echo "WTF? ftp_watchd was not running."
+	fi
+	Func_start
+}
+
+Func_status() {
+	if Is_running ; then
+		echo "ftp_watchd is running at pid" "${pid}"
+	else
+		echo "ftp_watchd is no running."
+	fi
+}
+
+Func_poll() {
+	if Is_running ; then
+		echo "Wait for pid: ${pid}"
+		wait_for_pids ${pid}	
+	fi
+}
+
+Error() {
+	echo "Error!!" "$1"
+	exit 0
+}
+
+case $1 in 
+	start)
+		Func_start
+	;;
+
+	stop)
+		Func_stop
+	;;
+
+	restart)
+		Func_restart
+	;;
+
+	status)
+		Func_status
+	;;
+
+	poll)
+		Func_poll
+	;;
+
+	*)
+		Error "No action ${1}!!"
+	;;
+esac 
+
