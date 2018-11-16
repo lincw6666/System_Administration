@@ -28,6 +28,18 @@ Check_dataset() {
 	Error "Dataset does not exist!!"
 }
 
+# Create directory if it does not exist.
+Check_dir() {
+	local path
+
+	path=`echo ${1} | cut -d '@' -f 1 | sed -e "s:/[^/]*$::g"`
+	echo ${path}
+	if ! [ -d "${path}" ] ; then
+		# Create the directory.
+		mkdir -p ${path}
+	fi
+}
+
 Func_list() {
 	#id=$1
 	#Check_num $id
@@ -71,7 +83,12 @@ Func_export() {
 	snap_name=`zfs list -t snapshot | grep "^$dataset@" | cut -d ' ' -f 1 | awk -v i=$id '{if (NR==i) print $0}'`
 
 	if ! [ -z "$snap_name" ] ; then
-		f_name=`echo $snap_name | cut -d '_' -f 1 | tr / \\`
+		f_name=`echo $snap_name | cut -d '_' -f 1`
+		f_name="/${f_name}"
+		
+		# Create directory if it does not exist.
+		Check_dir "${f_name}"
+
 		zfs send ${snap_name} > ${f_name} && \
 			xz ${f_name} && \
 			openssl enc -aes-256-cbc -in ${f_name}.xz \
@@ -86,14 +103,15 @@ Func_import() {
 	filename=$1
 	Check_dataset $dataset
 	if [ -z "$filename" ] ; then Error "Missing argument: filename!!"; fi
+	if ! [ -e "${filename}" ] ; then Error "File not found: ${filename}!!"; fi
 
 	# Decreption.
 	f_name=`echo $filename | awk -F '.' '{print $1"."$2}'`
-	openssl enc -d -aes-256-cbc -in ${filename} -out ${f_name}
+	openssl enc -d -aes-256-cbc -in "${filename}" -out "${f_name}"
 	
 	# Decompression.
 	unxz $f_name
-	if [ $? -eq 1 ] ; then Error "Unable to decompress ${f_name}. Please make sure that the file exists!!"; fi	# File not exist.
+	if [ $? -eq 1 ] ; then Error "Unable to decompress ${f_name}!!"; fi
 	f_name=`echo $f_name | cut -d '.' -f 1`
 
 	# Receive stream.
