@@ -33,7 +33,6 @@ Check_dir() {
 	local path
 
 	path=`echo ${1} | cut -d '@' -f 1 | sed -e "s:/[^/]*$::g"`
-	echo ${path}
 	if ! [ -d "${path}" ] ; then
 		# Create the directory.
 		mkdir -p ${path}
