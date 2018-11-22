@@ -1,0 +1,149 @@
+#!/bin/sh
+
+file_config="/usr/local/etc/zbackupd.yaml"
+pid_file="/var/run/zbackup.pid"
+
+Check_Dataset() {
+	for data in `zfs list | cut -d ' ' -f 1`; do
+		if [ ${1} = ${data} ] ; then
+			return
+		fi
+	done
+	Error "Dataset does not exist!!"
+}
+
+Check_Enable() {
+	if [ "${1}" = "false" ] ; then
+		return 1
+	elif [ "${1}" = "true" ] || [ -z "${1}" ] ; then
+		return 0
+	else
+		Error "Wrong enable value!!"
+	fi
+}
+
+Check_Int() {
+	local tmp
+
+	tmp=`echo ${1} | sed -e "/^[0-9]+$/ p"`
+	if [ -z "${tmp}" ] ; then
+		Error "Wrong rotation value!!"
+	fi
+}
+
+Check_Period() {
+	local tmp
+
+	tmp=`echo ${1} | sed -e "/^[0-9]+[smhdw]$/ p"`
+	if [ -z "${tmp}" ] ; then
+		Error "Wrong period value!!"
+	fi
+}
+
+Get_Config_Value() {
+	local retval
+
+	retval=`sed -n "${1},$ p" ${2} | grep -m 1 ${3} | awk '{print $2}' | tr -d " '"`
+
+	echo $retval
+}
+
+Write_Crontab() {
+	# $1: period
+	# $2: backup command
+	local sec min hour day cmd
+
+	# Deal with period.
+	value=`echo $1 | awk -F "s|m|h|d|w" '{print $1}'`
+	unit=`echo $1 | awk -F "${value}" '{print $2}'`
+	Check_Int "${value}"
+
+	cmd=$2
+	case ${unit} in 
+		s)
+			
+		;;
+
+		m)
+			sec=`date "+%S"`
+			#printf "*/${value}\t*\t*\t*\t*\troot\t/bin/sleep ${sec} && /bin/date >> /tmp/test\n" >> /etc/crontab
+		;;
+
+		h)
+			sec=`date "+%S"`
+			min=`date "+%M"`
+			#printf "${min}\t*/${value}\t*\t*\t*\troot\t/bin/sleep ${sec} && /bin/date >> /tmp/test\n" >> /etc/crontab
+		;;
+
+		d)
+			sec=`date "+%S"`
+			min=`date "+%M"`
+			hour=`date "+%H"`
+			#printf "${min}\t${hour}\t*/${value}\t*\t*\troot\t/bin/sleep ${sec} && /bin/date >> /tmp/test\n" >> /etc/crontab
+		;;
+
+		w)
+			sec=`date "+%S"`
+			min=`date "+%M"`
+			hour=`date "+%H"`
+			#printf "${min}\t${hour}\t*/$(($value * 7))\t*\t*\troot\t/bin/sleep ${sec} && /bin/date >> /tmp/test\n" >> /etc/crontab
+		;;
+
+		*)
+			Error "Unknown error in function write crontab!!"
+		;;
+	esac
+}
+
+Error() {
+	echo "Error!! ${1}"
+	exit 0
+}
+
+
+# Get arguments from input.
+while getopts ":dc:p:" op ; do 
+	case ${op} in
+		# Run zbackupd as daemon.
+		d)
+		;;
+		
+		# Change configure file.
+		c)
+			file_config="${OPTARG}"
+		;;
+		
+		# Change pid file.
+		p)
+			pid_file="${OPTARG}"
+		;;
+
+		*)
+			Error "Wrong arguments!!"
+		;;
+	esac
+done
+
+# Parse configure file.
+file_config="test.conf"
+for data_line in `cat ${file_config} | grep -n dataset | cut -d : -f 1` ; do
+	# Get dataset name.
+	dataset=`sed -n "${data_line} p" ${file_config} | awk '{print $3}' | tr -d " '"`
+	Check_Dataset "${dataset}"
+	
+	# Get "enabled": true or false.
+	enable="`Get_Config_Value ${data_line} ${file_config} 'enabled'`"
+	if Check_Enable "${enable}" ; then
+		# Get rotation.
+		rotation="`Get_Config_Value ${data_line} ${file_config} 'rotation'`"
+		Check_Int "${rotation}"
+		backup_cmd="zbackup ${dataset} ${rotation}"
+
+		# Get period.
+		period=`Get_Config_Value ${data_line} ${file_config} 'period'`
+		Check_Period "${period}"
+		
+		Write_Crontab "${period}" "${backup_cmd}"
+	fi
+done
+
