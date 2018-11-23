@@ -48,10 +48,10 @@ Get_Config_Value() {
 	echo $retval
 }
 
-Write_Crontab() {
+Start_CMD() {
 	# $1: period
 	# $2: backup command
-	local sec min hour day cmd
+	local sec min hour day cmd tmp
 
 	# Deal with period.
 	value=`echo $1 | awk -F "s|m|h|d|w" '{print $1}'`
@@ -59,34 +59,64 @@ Write_Crontab() {
 	Check_Int "${value}"
 
 	cmd=$2
+	tmp=`echo $dataset | cut -d / -f 1`
 	case ${unit} in 
 		s)
-			
+			date >> /tmp/${tmp}
+			# Fork child process.
+			while true ; do
+				sleep ${value}
+				date >> /tmp/${tmp}
+			done &
 		;;
 
 		m)
-			sec=`date "+%S"`
+			#sec=`date "+%S"`
 			#printf "*/${value}\t*\t*\t*\t*\troot\t/bin/sleep ${sec} && /bin/date >> /tmp/test\n" >> /etc/crontab
+			date >> /tmp/${tmp}
+			while true ; do
+				echo $((${value} * 60)) >> /tmp/x
+				sleep $((${value} * 60))
+				date >> /tmp/${tmp}
+			done &
 		;;
 
 		h)
-			sec=`date "+%S"`
-			min=`date "+%M"`
+			#sec=`date "+%S"`
+			#min=`date "+%M"`
 			#printf "${min}\t*/${value}\t*\t*\t*\troot\t/bin/sleep ${sec} && /bin/date >> /tmp/test\n" >> /etc/crontab
+			date >> /tmp/${tmp}
+			while true ; do
+				echo $((${value} * 3600)) >> /tmp/x
+				sleep $((${value} * 3600))
+				date >> /tmp/${tmp}
+			done &
 		;;
 
 		d)
-			sec=`date "+%S"`
-			min=`date "+%M"`
-			hour=`date "+%H"`
+			#sec=`date "+%S"`
+			#min=`date "+%M"`
+			#hour=`date "+%H"`
 			#printf "${min}\t${hour}\t*/${value}\t*\t*\troot\t/bin/sleep ${sec} && /bin/date >> /tmp/test\n" >> /etc/crontab
+			date >> /tmp/${tmp}
+			while true ; do
+				echo $((${value} * 86400)) >> /tmp/x
+				sleep $((${value} * 86400))
+				date >> /tmp/${tmp}
+			done &
 		;;
 
 		w)
-			sec=`date "+%S"`
-			min=`date "+%M"`
-			hour=`date "+%H"`
+			#sec=`date "+%S"`
+			#min=`date "+%M"`
+			#hour=`date "+%H"`
 			#printf "${min}\t${hour}\t*/$(($value * 7))\t*\t*\troot\t/bin/sleep ${sec} && /bin/date >> /tmp/test\n" >> /etc/crontab
+			date >> /tmp/${tmp}
+			while true ; do
+				echo $((${value} * 604800)) >> /tmp/x
+				sleep $((${value} * 604800))
+				date >> /tmp/${tmp}
+			done &
 		;;
 
 		*)
@@ -116,6 +146,7 @@ while getopts ":dc:p:" op ; do
 		# Change pid file.
 		p)
 			pid_file="${OPTARG}"
+			echo $$ > ${pid_file}
 		;;
 
 		*)
@@ -125,7 +156,6 @@ while getopts ":dc:p:" op ; do
 done
 
 # Parse configure file.
-file_config="test.conf"
 for data_line in `cat ${file_config} | grep -n dataset | cut -d : -f 1` ; do
 	# Get dataset name.
 	dataset=`sed -n "${data_line} p" ${file_config} | awk '{print $3}' | tr -d " '"`
@@ -143,7 +173,9 @@ for data_line in `cat ${file_config} | grep -n dataset | cut -d : -f 1` ; do
 		period=`Get_Config_Value ${data_line} ${file_config} 'period'`
 		Check_Period "${period}"
 		
-		Write_Crontab "${period}" "${backup_cmd}"
+		Start_CMD "${period}" "${backup_cmd}"
 	fi
 done
 
+while true ; do
+done
