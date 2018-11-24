@@ -22,7 +22,7 @@ pidfile="${pidfile_zbackupd}"
 
 logfile_zbackupd=${logfile_zbackupd:-"/var/log/zbackup.log"}
 
-command_args="-d -p ${pidfile} -c ${zbackupd_config}"
+command_args="-d -p ${pidfile} -c ${zbackupd_config} >> ${logfile_zbackupd} 2>&1"
 extra_commands="reload list"
 
 reload_cmd="Func_Reload"
