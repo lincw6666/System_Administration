@@ -4,8 +4,8 @@ file_config="/usr/local/etc/zbackupd.yaml"
 pid_file="/var/run/zbackup.pid"
 be_daemon=""
 
-trap "Config_and_Start" SIGHUP
-trap "if [ -e ${pid_file} ]; then rm ${pid_file}; fi; exit 0" SIGTERM
+#trap "Config_and_Start" SIGHUP
+#trap "if [ -e ${pid_file} ]; then rm ${pid_file}; fi; exit 0" SIGTERM
 
 Check_Dataset() {
 	for data in `zfs list | cut -d ' ' -f 1`; do
@@ -178,6 +178,9 @@ while getopts ":dc:p:" op ; do
 		;;
 	esac
 done
+
+trap "Config_and_Start" SIGHUP
+trap "if [ -e ${pid_file} ]; then rm ${pid_file}; fi; exit 0" SIGTERM
 
 # Check configure file exists or not.
 if ! [ -e "${file_config}" ] ; then
