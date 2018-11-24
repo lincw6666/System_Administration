@@ -2,6 +2,10 @@
 
 file_config="/usr/local/etc/zbackupd.yaml"
 pid_file="/var/run/zbackup.pid"
+be_daemon=""
+
+trap "Config_and_Start" SIGHUP
+trap "if [ -e ${pid_file} ]; then rm ${pid_file}; fi; exit 0" SIGTERM
 
 Check_Dataset() {
 	for data in `zfs list | cut -d ' ' -f 1`; do
@@ -68,55 +72,43 @@ Start_CMD() {
 				sleep ${value}
 				date >> /tmp/${tmp}
 			done &
+			pid="${pid}$! "
 		;;
 
 		m)
-			#sec=`date "+%S"`
-			#printf "*/${value}\t*\t*\t*\t*\troot\t/bin/sleep ${sec} && /bin/date >> /tmp/test\n" >> /etc/crontab
 			date >> /tmp/${tmp}
 			while true ; do
-				echo $((${value} * 60)) >> /tmp/x
 				sleep $((${value} * 60))
 				date >> /tmp/${tmp}
 			done &
+			pid="${pid}$! "
 		;;
 
 		h)
-			#sec=`date "+%S"`
-			#min=`date "+%M"`
-			#printf "${min}\t*/${value}\t*\t*\t*\troot\t/bin/sleep ${sec} && /bin/date >> /tmp/test\n" >> /etc/crontab
 			date >> /tmp/${tmp}
 			while true ; do
-				echo $((${value} * 3600)) >> /tmp/x
 				sleep $((${value} * 3600))
 				date >> /tmp/${tmp}
 			done &
+			pid="${pid}$! "
 		;;
 
 		d)
-			#sec=`date "+%S"`
-			#min=`date "+%M"`
-			#hour=`date "+%H"`
-			#printf "${min}\t${hour}\t*/${value}\t*\t*\troot\t/bin/sleep ${sec} && /bin/date >> /tmp/test\n" >> /etc/crontab
 			date >> /tmp/${tmp}
 			while true ; do
-				echo $((${value} * 86400)) >> /tmp/x
 				sleep $((${value} * 86400))
 				date >> /tmp/${tmp}
 			done &
+			pid="${pid}$! "
 		;;
 
 		w)
-			#sec=`date "+%S"`
-			#min=`date "+%M"`
-			#hour=`date "+%H"`
-			#printf "${min}\t${hour}\t*/$(($value * 7))\t*\t*\troot\t/bin/sleep ${sec} && /bin/date >> /tmp/test\n" >> /etc/crontab
 			date >> /tmp/${tmp}
 			while true ; do
-				echo $((${value} * 604800)) >> /tmp/x
 				sleep $((${value} * 604800))
 				date >> /tmp/${tmp}
 			done &
+			pid="${pid}$! "
 		;;
 
 		*)
@@ -130,12 +122,45 @@ Error() {
 	exit 0
 }
 
+Config_and_Start() {
+	pid=""
+	# Parse configure file.
+	for data_line in `cat ${file_config} | grep -n dataset | cut -d : -f 1` ; do
+		# Get dataset name.
+		dataset=`sed -n "${data_line} p" ${file_config} | awk '{print $3}' | tr -d " '"`
+		Check_Dataset "${dataset}"
+	
+		# Get "enabled": true or false.
+		enable="`Get_Config_Value ${data_line} ${file_config} 'enabled'`"
+		if Check_Enable "${enable}" ; then
+			# Get rotation.
+			rotation="`Get_Config_Value ${data_line} ${file_config} 'rotation'`"
+			Check_Int "${rotation}"
+			backup_cmd="/usr/local/bin/zbackup ${dataset} ${rotation}"
+
+			# Get period.
+			period=`Get_Config_Value ${data_line} ${file_config} 'period'`
+			Check_Period "${period}"
+		
+			Start_CMD "${period}" "${backup_cmd}"
+		fi
+	done
+
+	# Wait for child processes.
+	wait ${pid}
+}
+
+# Need root privilege.
+if [ "`id -u`" -ne "0" ] ; then
+	Error "Permission denied!!"
+fi
 
 # Get arguments from input.
 while getopts ":dc:p:" op ; do 
 	case ${op} in
 		# Run zbackupd as daemon.
 		d)
+			be_daemon="yes"
 		;;
 		
 		# Change configure file.
@@ -146,7 +171,6 @@ while getopts ":dc:p:" op ; do
 		# Change pid file.
 		p)
 			pid_file="${OPTARG}"
-			echo $$ > ${pid_file}
 		;;
 
 		*)
@@ -155,27 +179,16 @@ while getopts ":dc:p:" op ; do
 	esac
 done
 
-# Parse configure file.
-for data_line in `cat ${file_config} | grep -n dataset | cut -d : -f 1` ; do
-	# Get dataset name.
-	dataset=`sed -n "${data_line} p" ${file_config} | awk '{print $3}' | tr -d " '"`
-	Check_Dataset "${dataset}"
-	
-	# Get "enabled": true or false.
-	enable="`Get_Config_Value ${data_line} ${file_config} 'enabled'`"
-	if Check_Enable "${enable}" ; then
-		# Get rotation.
-		rotation="`Get_Config_Value ${data_line} ${file_config} 'rotation'`"
-		Check_Int "${rotation}"
-		backup_cmd="zbackup ${dataset} ${rotation}"
+# Check configure file exists or not.
+if ! [ -e "${file_config}" ] ; then
+	Error "Configure file does not exist!!"
+fi
 
-		# Get period.
-		period=`Get_Config_Value ${data_line} ${file_config} 'period'`
-		Check_Period "${period}"
-		
-		Start_CMD "${period}" "${backup_cmd}"
-	fi
-done
+if [ "${be_daemon}" = "yes" ] ; then
+	/usr/local/bin/zbackupd -p ${pid_file} -c ${file_config} &
+else
+	# Create pid file.
+	echo $$ > ${pid_file}
+	Config_and_Start
+fi
 
-while true ; do
-done
