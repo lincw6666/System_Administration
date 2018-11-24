@@ -1,0 +1,63 @@
+#!/bin/sh
+
+# PROVIDE: zbackupd
+# KEYWORD: shutdown
+
+. /etc/rc.subr
+
+name=zbackupd
+rcvar=zbackupd_enable
+
+load_rc_config $name
+
+command=/usr/local/bin/zbackupd
+command_interpreter=/bin/sh
+zbackupd_enable=${zbackupd_enable:-"no"}
+
+zbackupd_config=${zbackupd_config:-"/usr/local/etc/zbackupd.yaml"}
+required_files="${zbackupd_config}"
+
+pidfile_zbackupd=${pidfile_zbackupd:-"/var/run/zbackup.pid"}
+pidfile="${pidfile_zbackupd}"
+
+logfile_zbackupd=${logfile_zbackupd:-"/var/log/zbackup.log"}
+
+command_args="-d -p ${pidfile} -c ${zbackupd_config}"
+extra_commands="reload list"
+
+reload_cmd="Func_Reload"
+list_cmd="Func_List"
+stop_cmd="Func_Stop"
+
+Func_Reload() {
+	local pid
+
+	pid="`cat ${pidfile_zbackupd} | head -1`"
+	ps -o pid,pgid -axww | grep ${pid} | head -1 | \
+		awk '{print "-"$2}' | xargs kill -SIGHUP
+}
+
+Func_List() {
+	/usr/local/bin/zbackup --list
+}
+
+Func_Stop() {
+	local pid
+
+	pid=$(check_pidfile ${pidfile} ${command} ${command_interpreter})
+	if [ -z "${pid}" ] ; then
+		Error "zbackupd was not running!!"
+	fi
+	echo "Stop zbackup."
+	ps -o pid,pgid -axww | grep ${pid} | head -1 | \
+		awk '{print "-"$2}' | xargs kill -SIGTERM
+	echo "Waiting pid: ${pid}."
+	wait ${pid}
+}
+
+Error() {
+	echo "Error!!" $1
+	exit 0
+}
+
+run_rc_command "$1"
