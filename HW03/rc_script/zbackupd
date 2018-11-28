@@ -30,11 +30,11 @@ list_cmd="Func_List"
 stop_cmd="Func_Stop"
 
 Func_Reload() {
-	local pid
+	local pid pgid
 
-	pid="`cat ${pidfile_zbackupd} | head -1`"
-	ps -o pid,pgid -axww | grep ${pid} | head -1 | \
-		awk '{print "-"$2}' | xargs kill -SIGHUP
+	pid=`cat ${pidfile_zbackupd} | head -1 | sed "1,$ s/[^0-9]*//g"`
+	pgid=`ps -o pid,pgid -axww | awk '{print $1" "$2}' | grep "^${pid} " | head -1 | awk '{print $2}'`
+	ps -o pid,pgid -axww | awk '{print $1" "$2}' | grep " ${pgid}$" | awk '{print $1}' | xargs kill -SIGUSR1
 }
 
 Func_List() {
