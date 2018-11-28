@@ -178,7 +178,7 @@ while getopts ":dc:p:" op ; do
 	esac
 done
 
-trap "Config_and_Start" SIGHUP
+trap "Config_and_Start" SIGUSR1
 trap "if [ -e ${pid_file} ]; then rm ${pid_file}; fi; exit 0" SIGTERM
 
 # Check configure file exists or not.
@@ -189,7 +189,8 @@ fi
 # Is daemon running now?
 if [ -e "${pid_file}" ] ; then
 	pid="`cat ${pid_file} | head -1`"
-	if ! [ -z "`ps -o pid -axww | grep ${pid}`" ] ; then
+	pid=`ps -o pid -axww | sed "1,$ s/^[ ]*//g" | grep "^${pid}$"`
+	if ! [ -z "${pid}" ] ; then
 		Error "Daemon is already running!!"
 	fi
 fi
