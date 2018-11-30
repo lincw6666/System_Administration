@@ -21,11 +21,9 @@ ftp_watchd_command=${ftp_watchd_command:-"echo 'Hi' >> /tmp/hi"}
 start_precmd=start_precmd
 
 start_precmd() {
-	if ! [ -e ${uploadscript} ] ; then
-		echo "#!/bin/sh" > ${uploadscript}
-		echo "${ftp_watchd_command}" >> ${uploadscript}
-		chmod 755 ${uploadscript}
-	fi
+	echo "#!/bin/sh" > ${uploadscript}
+	echo "${ftp_watchd_command}" >> ${uploadscript}
+	chmod 755 ${uploadscript}
 }
 
 run_rc_command "$1"
