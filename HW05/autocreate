@@ -1,0 +1,51 @@
+#!/bin/sh
+
+# $1 = new user's group
+# $2 = new user's list (username, fullname)
+
+Error() {
+	echo "Error:" "$1"
+	exit 0
+}
+
+# We need exactly 2 arguements. Otherwise, exit.
+if [ "`echo $#`" -lt 2 ] ; then
+	Error "Too few arguements!"
+elif [ "`echo $#`" -gt 2 ] ; then
+	Error "Too many arguements!"
+fi
+
+# Check group. Create new group if it does not exist.
+if ! cut -d : -f 1 /etc/group | grep -q "^$1$" ; then
+	if ! ypcat group | cut -d : -f 1 | grep -q "^$1$" ; then
+		pw -V /var/yp/src groupadd "$1"
+	fi
+fi
+
+# Add users.
+if ! [ -e "$2" ] ; then
+	Error "Account list file not found!"
+fi
+
+for user in `sed '/^$/d' "$2" | tr ' ' '\`'` ;do
+	user="`echo ${user} | tr '\`' ' '`"
+	username="`echo ${user} | tr -d ' ' | cut -d , -f 1`"
+	fullname="`echo ${user} | cut -d , -f 2`"
+	homedir="/net/home/${username}"
+	
+	# Make home directory.
+	mkdir -p "${homedir}"
+	chmod 777 "${homedir}"
+	
+	# Create user.
+	pw -V /var/yp/src useradd -n "${username}" \
+		-c "${fullname}" -d "${homedir}" \
+		-g "$1" -k "${homedir}" \
+		-w random -s tcsh
+done
+
+# Update NIS maps.
+now_dir="`pwd`"
+cd /var/yp
+make
+cd "${now_dir}"
