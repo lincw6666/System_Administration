@@ -3,6 +3,75 @@ SA Homework 05
 
 ---
 
+## NFS Service
+
+----
+
+### NFS Server
+
+- Edit `/etc/rc.conf`.
+```shell=
+rpcbind_enable="YES"
+nfs_server_enable="YES"
+nfs_server_flags="-u -t -n 4"
+nfsv4_server_enable="YES"
+mountd_enable="YES"
+mountd_flags="-r"
+nfsuserd_enable="YES"
+nfsuserd_flags="-domain SA-HW -manage-gids"
+```
+
+----
+
+### NFS Client
+
+- Edit `/etc/rc.conf`.
+```shell=
+nfs_client_enable="YES"
+autofs_enablve="YES"
+nfsuserd_enablve="YES"
+nfsuserd_flags="-domain SA-HW"
+```
+
+---
+
+## NIS Service
+
+----
+
+### NIS Master
+
+- Edit `/etc/rc.conf`.
+```shell=
+nisdomainnmae="SA-HW"
+nis_server_enable="YES"
+nis_yppasswdd_enable="YES"
+nis_yppasswdd_flags="-t /var/yp/src/master.passwd"
+```
+
+----
+
+### NIS Slave
+
+- Edit `/etc/rc.conf`.
+```shell=
+nisdomainname="SA-HW"
+nis_server_enable="YES"
+```
+
+----
+
+### NIS Client
+
+- Edit `/etc/rc.conf`.
+```shell=
+nis_client_enable="YES"
+nis_client_flags="-s -m -S SA-HW,storage,account"
+```
+- `-S` follow by nis_domain_name,server1,server2... Up to 10 servers can be specified. The last server specified gains the highest privilege. In this case, account has higher privilege than storage.
+
+---
+
 ## Bonus 1
 share autofs.map by nis
 
