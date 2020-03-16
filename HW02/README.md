@@ -47,5 +47,7 @@ There are two parts in homework 02.
     - Output: all courses containing the search time.
 
 ## Results
+⚠ Only work on FreeBSD ⚠
+
 ![](https://i.imgur.com/9P8DK0l.png)
 ![](https://i.imgur.com/zQiTW0x.png)
